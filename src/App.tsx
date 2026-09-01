@@ -119,11 +119,21 @@ export default function App() {
   
   const [rules, setRules] = useState<MappingRules>(() => {
     const saved = localStorage.getItem('spacebridge-rules');
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+       const parsed = JSON.parse(saved);
+       return {
+         ...parsed,
+         autoArchiveRules: parsed.autoArchiveRules || [],
+         exportMacros: parsed.exportMacros || []
+       };
+    }
+    return {
       includeInstructions: true,
       includeThreads: true,
       includeArtifacts: true,
-      truncateLength: 10000
+      truncateLength: 5000,
+      autoArchiveRules: [],
+      exportMacros: []
     };
   });
 
@@ -159,8 +169,18 @@ export default function App() {
     });
 
     if (safe.length > 0) {
-      setDrafts(prev => [...prev, ...safe]);
-      const newEntries = safe.map(d => ({
+      const finalSafe = safe.map(d => {
+        let archive = false;
+        for (const rule of rules.autoArchiveRules || []) {
+          if (rule.condition === 'always') archive = true;
+          if (rule.condition === 'title_contains' && rule.value && d.title?.toLowerCase().includes(rule.value.toLowerCase())) archive = true;
+          if (rule.condition === 'has_tag' && rule.value && d.tags?.includes(rule.value)) archive = true;
+          if (rule.condition === 'has_category' && rule.value && d.category === rule.value) archive = true;
+        }
+        return archive ? { ...d, isArchived: true } : d;
+      });
+      setDrafts(prev => [...prev, ...finalSafe]);
+      const newEntries = finalSafe.map(d => ({
         id: Math.random().toString(36).substring(7),
         title: d.title || 'Untitled Space',
         timestamp: new Date().toISOString(),

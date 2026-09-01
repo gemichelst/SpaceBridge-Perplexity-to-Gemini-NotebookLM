@@ -31,6 +31,8 @@ export interface MappingRules {
   includeThreads: boolean;
   includeArtifacts: boolean;
   truncateLength: number;
+  autoArchiveRules?: AutoArchiveRule[];
+  exportMacros?: ExportMacro[];
 }
 
 export interface HistoryEntry {
@@ -39,4 +41,19 @@ export interface HistoryEntry {
   timestamp: string;
   threadCount: number;
   artifactCount: number;
+}
+
+export interface AutoArchiveRule {
+  id: string;
+  condition: 'has_tag' | 'has_category' | 'title_contains' | 'always';
+  value: string;
+}
+
+export interface ExportMacro {
+  id: string;
+  name: string;
+  icon?: string;
+  actions: ('add_tag' | 'set_category' | 'archive' | 'export_md' | 'export_json')[];
+  tagValue?: string;
+  categoryValue?: string;
 }

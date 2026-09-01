@@ -21,7 +21,7 @@ export function ExportOptions({ drafts, rules, onReset, showToast, toggleArchive
   
   const [bulkActionModal, setBulkActionModal] = useState<{
     isOpen: boolean;
-    type: 'tag' | 'category' | 'preset' | 'delete' | null;
+    type: 'tag' | 'category' | 'preset' | 'delete' | 'macro' | null;
     inputValue: string;
   }>({ isOpen: false, type: null, inputValue: '' });
 
@@ -124,12 +124,33 @@ export function ExportOptions({ drafts, rules, onReset, showToast, toggleArchive
       setDrafts(prev => prev.map(d => selectedUrls.has(d.url) ? { ...d, category: val } : d));
       if (showToast) showToast(`Categorized ${selectedUrls.size} spaces`, 'success');
       setSelectedUrls(new Set());
+    } else if (type === 'macro' && val && setDrafts) {
+      if (val === 'macro_1') {
+        setDrafts(prev => prev.map(d => {
+          if (selectedUrls.has(d.url)) {
+            const newTags = Array.from(new Set([...(d.tags || []), 'Exported']));
+            return { ...d, tags: newTags, isArchived: true };
+          }
+          return d;
+        }));
+        handleProgressiveBatchExport();
+        if (showToast) showToast('Macro complete: Exported, tagged, and archived.', 'success');
+        setSelectedUrls(new Set());
+      } else if (val === 'macro_2') {
+        setDrafts(prev => prev.map(d => {
+          if (selectedUrls.has(d.url)) {
+            return { ...d, category: 'Done', isArchived: true };
+          }
+          return d;
+        }));
+        if (showToast) showToast('Macro complete: Marked Done and archived.', 'success');
+        setSelectedUrls(new Set());
+      }
     }
     
     setBulkActionModal({ isOpen: false, type: null, inputValue: '' });
   };
-
-
+  
   const getIntegrityScore = (d: SpaceData) => {
     const issues: string[] = [];
     if (!d.instructions || d.instructions === 'No explicit instructions found.') issues.push('Missing instructions');
@@ -291,12 +312,14 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
   
   
   const handleProgressiveBatchExport = async () => {
-    if (drafts.length === 0) return;
+    const toExport = selectedUrls.size > 0 ? drafts.filter(d => selectedUrls.has(d.url)) : drafts;
+    if (toExport.length === 0) return;
     setProcessingStatus('markdown');
-    setBatchProgress({ current: 0, total: drafts.length, active: true });
-    for (let i = 0; i < drafts.length; i++) {
-      setBatchProgress({ current: i + 1, total: drafts.length, active: true });
-      const d = drafts[i];
+    setBatchProgress({ current: 0, total: toExport.length, active: true });
+    
+    for (let i = 0; i < toExport.length; i++) {
+      setBatchProgress({ current: i + 1, total: toExport.length, active: true });
+      const d = toExport[i];
       const md = generateMarkdown([d]);
       const blob = new Blob([md], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
@@ -305,11 +328,9 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
       a.download = `SpaceBridge_${d.title?.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'space'}_${i+1}.md`;
       a.click();
       URL.revokeObjectURL(url);
-    if (logActivity) {
-      const tCount = toExport.reduce((acc, d) => acc + (d.threads?.length || 0), 0);
-      const aCount = toExport.reduce((acc, d) => acc + (d.artifacts?.length || 0), 0);
-      logActivity(tCount, aCount);
-    }
+      if (logActivity) {
+        logActivity(d.threads?.length || 0, d.artifacts?.length || 0);
+      }
       await new Promise(r => setTimeout(r, 1000));
     }
     setBatchProgress({ current: 0, total: 0, active: false });
@@ -451,6 +472,7 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
              <button onClick={handleBulkTag} className="px-3 py-1 text-xs font-medium bg-white dark:bg-zinc-800 border border-purple-200 dark:border-purple-500/30 text-purple-700 dark:text-purple-300 rounded hover:bg-purple-100 dark:hover:bg-purple-500/30 transition-colors">Add Tag</button>
              <button onClick={handleBulkCategorize} className="px-3 py-1 text-xs font-medium bg-white dark:bg-zinc-800 border border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-300 rounded hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-colors">Set Category</button>
              <button onClick={handleBulkArchive} className="px-3 py-1 text-xs font-medium bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded hover:bg-emerald-50 dark:hover:bg-emerald-500/30 transition-colors">Archive</button>
+                          <button onClick={() => setBulkActionModal({ isOpen: true, type: 'macro', inputValue: '' })} className="px-3 py-1 text-xs font-medium bg-gradient-to-r from-pink-500 to-orange-400 text-white border border-transparent rounded hover:opacity-90 transition-opacity flex items-center gap-1 shadow-sm">Run Macro</button>
              <button onClick={handleBulkDelete} className="px-3 py-1 text-xs font-medium bg-white dark:bg-zinc-800 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300 rounded hover:bg-red-50 dark:hover:bg-red-500/30 transition-colors">Delete</button>
           </div>
         )}
@@ -751,6 +773,36 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
         </div>
       )}
 
+      
+      {/* Batch Status Monitor */}
+      <AnimatePresence>
+        {batchProgress.active && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: 50 }} 
+            className="fixed bottom-6 right-6 left-6 md:left-auto md:w-96 bg-zinc-900 dark:bg-black border border-zinc-800 rounded-xl p-5 shadow-2xl z-50"
+          >
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-white font-semibold text-sm flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                Processing Batch Export...
+              </h4>
+              <span className="text-zinc-400 text-xs">{batchProgress.current} / {batchProgress.total}</span>
+            </div>
+            <div className="w-full bg-zinc-800 rounded-full h-2 mb-2 overflow-hidden">
+              <motion.div 
+                className="bg-indigo-500 h-2 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <p className="text-xs text-zinc-500 text-right">Please do not close the window.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Action Modal */}
       {bulkActionModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 dark:bg-black/60 backdrop-blur-sm">
@@ -759,15 +811,16 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
               <h3 className="text-lg font-semibold text-zinc-900 dark:text-white mb-2">
                 {bulkActionModal.type === 'tag' ? 'Add Tag' : 
                  bulkActionModal.type === 'category' ? 'Set Category' : 
-                 bulkActionModal.type === 'preset' ? 'Save Preset' : 'Confirm Deletion'}
+                 bulkActionModal.type === 'preset' ? 'Save Preset' : 
+                 bulkActionModal.type === 'macro' ? 'Run Export Macro' : 'Confirm Deletion'}
               </h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
                 {bulkActionModal.type === 'tag' ? `Add a tag to ${selectedUrls.size} selected space(s).` : 
                  bulkActionModal.type === 'category' ? `Set a category for ${selectedUrls.size} selected space(s).` : 
-                 bulkActionModal.type === 'preset' ? 'Enter a name for your current export settings.' : `Are you sure you want to permanently delete ${selectedUrls.size} space(s)?`}
+                 bulkActionModal.type === 'preset' ? 'Enter a name for your current export settings.' : bulkActionModal.type === 'macro' ? `Select an automated sequence to run on ${selectedUrls.size} space(s).` : `Are you sure you want to permanently delete ${selectedUrls.size} space(s)?`}
               </p>
               
-              {bulkActionModal.type !== 'delete' && (
+              {bulkActionModal.type !== 'delete' && bulkActionModal.type !== 'macro' && (
                 <input
                   autoFocus
                   type="text"
@@ -778,6 +831,18 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
                   className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2"
                 />
               )}
+              {bulkActionModal.type === 'macro' && (
+                <select
+                  value={bulkActionModal.inputValue}
+                  onChange={e => setBulkActionModal(prev => ({ ...prev, inputValue: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2"
+                >
+                  <option value="" disabled>Select a macro...</option>
+                  <option value="macro_1">Tag "Exported", Export Markdown, and Archive</option>
+                  <option value="macro_2">Categorize as "Done" and Archive</option>
+                </select>
+              )}
+
             </div>
             <div className="bg-zinc-50 dark:bg-[#121214] px-6 py-4 flex justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800">
               <button
@@ -790,7 +855,7 @@ ${applyPrivacy(thread.content || '').substring(0, rules.truncateLength) || ''}
                 onClick={submitBulkAction}
                 className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors shadow-sm ${bulkActionModal.type === 'delete' ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
               >
-                {bulkActionModal.type === 'delete' ? 'Delete' : 'Save'}
+                {bulkActionModal.type === 'delete' ? 'Delete' : bulkActionModal.type === 'macro' ? 'Run Macro' : 'Save'}
               </button>
             </div>
           </div>

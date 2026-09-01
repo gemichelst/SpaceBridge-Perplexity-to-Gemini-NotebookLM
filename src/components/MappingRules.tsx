@@ -80,6 +80,66 @@ export function MappingRulesPanel({ rules, setRules }: MappingRulesProps) {
           </label>
         </div>
 
+        
+        <div className="bg-zinc-100 dark:bg-[#18181b] border border-zinc-200 dark:border-[#27272a] rounded-xl p-5">
+          <h3 className="text-sm font-medium text-zinc-900 dark:text-[#e4e4e7] mb-4">Auto-Archiving Rules</h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">Automatically archive spaces upon import if they match these conditions.</p>
+          
+          <div className="space-y-3 mb-4">
+            {(rules.autoArchiveRules || []).map((rule, idx) => (
+              <div key={rule.id} className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-2 rounded border border-zinc-200 dark:border-zinc-800 text-sm">
+                <span className="text-zinc-500">If</span>
+                <select 
+                  value={rule.condition}
+                  onChange={e => {
+                    const next = [...(rules.autoArchiveRules || [])];
+                    next[idx].condition = e.target.value as any;
+                    setRules({...rules, autoArchiveRules: next});
+                  }}
+                  className="bg-transparent font-medium focus:outline-none"
+                >
+                  <option value="title_contains">Title Contains</option>
+                  <option value="has_tag">Has Tag</option>
+                  <option value="has_category">Has Category</option>
+                  <option value="always">Always</option>
+                </select>
+                {rule.condition !== 'always' && (
+                  <input
+                    type="text"
+                    placeholder="value..."
+                    value={rule.value}
+                    onChange={e => {
+                      const next = [...(rules.autoArchiveRules || [])];
+                      next[idx].value = e.target.value;
+                      setRules({...rules, autoArchiveRules: next});
+                    }}
+                    className="flex-1 bg-transparent border-b border-zinc-300 dark:border-zinc-700 focus:outline-none focus:border-indigo-500"
+                  />
+                )}
+                <button 
+                  onClick={() => {
+                    const next = (rules.autoArchiveRules || []).filter((_, i) => i !== idx);
+                    setRules({...rules, autoArchiveRules: next});
+                  }}
+                  className="text-red-500 hover:text-red-600"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+          
+          <button
+            onClick={() => {
+              const next = [...(rules.autoArchiveRules || []), { id: crypto.randomUUID(), condition: 'title_contains', value: '' }];
+              setRules({...rules, autoArchiveRules: next as any});
+            }}
+            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            + Add Archiving Rule
+          </button>
+        </div>
+
         <div className="flex justify-end">
           <button 
             onClick={handleSave}
