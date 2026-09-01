@@ -1,0 +1,6 @@
+{
+  "name": "SpaceBridge",
+  "description": "Export Perplexity Spaces into Gemini Gems and NotebookLM formats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
